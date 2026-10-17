@@ -8,17 +8,40 @@ import {IdentityMachine} from "./IdentityMachine.sol";
 
 // ABI-compatible with Uniswap v4-core IPoolManager and v4-periphery IV4Quoter.
 // https://github.com/Uniswap/v4-periphery/blob/main/src/interfaces/IV4Quoter.sol
-struct EthPoolKey { address currency0; address currency1; uint24 fee; int24 tickSpacing; address hooks; }
-struct EthSwapParams { bool zeroForOne; int256 amountSpecified; uint160 sqrtPriceLimitX96; }
-struct EthQuoteParams { EthPoolKey poolKey; bool zeroForOne; uint128 exactAmount; bytes hookData; }
+struct EthPoolKey {
+    address currency0;
+    address currency1;
+    uint24 fee;
+    int24 tickSpacing;
+    address hooks;
+}
+
+struct EthSwapParams {
+    bool zeroForOne;
+    int256 amountSpecified;
+    uint160 sqrtPriceLimitX96;
+}
+
+struct EthQuoteParams {
+    EthPoolKey poolKey;
+    bool zeroForOne;
+    uint128 exactAmount;
+    bytes hookData;
+}
+
 interface IEthPoolManager {
     function unlock(bytes calldata data) external returns (bytes memory);
-    function swap(EthPoolKey calldata key, EthSwapParams calldata params, bytes calldata hookData) external returns (int256);
+    function swap(EthPoolKey calldata key, EthSwapParams calldata params, bytes calldata hookData)
+        external
+        returns (int256);
     function settle() external payable returns (uint256);
     function take(address currency, address to, uint256 amount) external;
 }
+
 interface IEthQuoter {
-    function quoteExactOutputSingle(EthQuoteParams calldata params) external returns (uint256 amountIn, uint256 gasEstimate);
+    function quoteExactOutputSingle(EthQuoteParams calldata params)
+        external
+        returns (uint256 amountIn, uint256 gasEstimate);
     function poolManager() external view returns (address);
 }
 
@@ -41,17 +64,29 @@ contract EthMinter is ReentrancyGuard {
     error PartialFill();
     error BadCallback();
     error RefundFailed();
-    event MintedWithEth(address indexed owner, uint256 indexed firstMintId, uint256 count, uint256 imdPaid, uint256 ethPaid);
+    event MintedWithEth(
+        address indexed owner, uint256 indexed firstMintId, uint256 count, uint256 imdPaid, uint256 ethPaid
+    );
 
     constructor(IdentityMachine machine_, IEthPoolManager manager_, IEthQuoter quoter_, uint24 fee_, uint24 spacing_) {
-        if (address(machine_).code.length == 0 || address(manager_).code.length == 0 || address(quoter_).code.length == 0
-            || quoter_.poolManager() != address(manager_) || fee_ >= 1_000_000 || spacing_ == 0 || spacing_ > uint24(type(int24).max)) revert BadPool();
+        if (
+            address(machine_).code.length == 0 || fee_ >= 1_000_000 || spacing_ == 0
+                || spacing_ > uint24(type(int24).max)
+        ) revert BadPool();
         machine = machine_;
         imd = machine_.imd();
         poolManager = manager_;
         quoter = quoter_;
         fee = fee_;
         tickSpacing = int24(spacing_);
+    }
+
+    /// @dev External pool contracts are absent in the launch rehearsal. Validate them at use instead.
+    function _checkPool() private view {
+        if (
+            address(poolManager).code.length == 0 || address(quoter).code.length == 0
+                || quoter.poolManager() != address(poolManager)
+        ) revert BadPool();
     }
 
     function poolKey() public view returns (EthPoolKey memory) {
@@ -63,10 +98,14 @@ contract EthMinter is ReentrancyGuard {
         if (n == 0 || n > machine.MAX_BATCH()) revert IdentityMachine.BadBatch();
         imdTotal = machine.quote(n);
         if (imdTotal > uint256(uint128(type(int128).max))) revert TooExpensive();
+        _checkPool();
         (ethTotal,) = quoter.quoteExactOutputSingle(EthQuoteParams(poolKey(), true, uint128(imdTotal), ""));
     }
 
-    function mint(uint256 n, uint256 maxImd, uint256 expires) external payable nonReentrant
+    function mint(uint256 n, uint256 maxImd, uint256 expires)
+        external
+        payable
+        nonReentrant
         returns (uint256 firstMintId, uint256 ethPaid)
     {
         return _mint(n, maxImd, expires, address(0));
@@ -74,23 +113,29 @@ contract EthMinter is ReentrancyGuard {
 
     /// @notice Referral reward is in IMD, from the machine's existing shared allocation.
     function mintWithReferral(uint256 n, uint256 maxImd, uint256 expires, address referrer)
-        external payable nonReentrant returns (uint256 firstMintId, uint256 ethPaid)
+        external
+        payable
+        nonReentrant
+        returns (uint256 firstMintId, uint256 ethPaid)
     {
         return _mint(n, maxImd, expires, referrer);
     }
 
     function _mint(uint256 n, uint256 maxImd, uint256 expires, address referrer)
-        private returns (uint256 firstMintId, uint256 ethPaid)
+        private
+        returns (uint256 firstMintId, uint256 ethPaid)
     {
         if (block.timestamp > expires) revert QuoteExpired();
         if (n == 0 || n > machine.MAX_BATCH()) revert IdentityMachine.BadBatch();
         uint256 total = machine.quote(n);
         if (total > maxImd || total > uint256(uint128(type(int128).max))) revert TooExpensive();
+        _checkPool();
         awaitingCallback = true;
         ethPaid = abi.decode(poolManager.unlock(abi.encode(total, msg.value)), (uint256));
         if (awaitingCallback) revert BadCallback();
         imd.forceApprove(address(machine), total);
-        (firstMintId,) = machine.mintForWithReferral(msg.sender, n, total, referrer == address(this) ? address(0) : referrer);
+        (firstMintId,) =
+            machine.mintForWithReferral(msg.sender, n, total, referrer == address(this) ? address(0) : referrer);
         uint256 refund = msg.value - ethPaid;
         if (refund != 0) {
             (bool ok,) = msg.sender.call{value: refund}("");

@@ -98,8 +98,20 @@ contract MachineViews {
     }
 
     function roundInfo(uint256 round) public view returns (RoundInfo memory r) {
-        (uint40 begin, uint40 deadline, uint40 ended, uint32 mints, uint32 placed, uint32 open, int32 minX, int32 minY,
-            int32 maxX, int32 maxY,, uint256 pot,, uint256 prize) = machine.rounds(round);
+        (
+            uint40 begin,
+            uint40 deadline,
+            uint40 ended,
+            uint32 mints,
+            uint32 placed,
+            uint32 open,
+            int32 minX,
+            int32 minY,
+            int32 maxX,
+            int32 maxY,,
+            uint256 pot,,
+            uint256 prize
+        ) = machine.rounds(round);
         r = RoundInfo(begin, deadline, ended, mints, placed, open, minX, minY, maxX, maxY, pot, prize);
     }
 
@@ -109,7 +121,9 @@ contract MachineViews {
         if (from == 0) from = 1;
         uint256 end = _rangeEnd(from, n, last + 1);
         out = new RoundInfo[](end > from ? end - from : 0);
-        for (uint256 i; i < out.length; ++i) out[i] = roundInfo(from + i);
+        for (uint256 i; i < out.length; ++i) {
+            out[i] = roundInfo(from + i);
+        }
     }
 
     /// @notice Parts placed in machine `round`, in placement order from the `from`-th (1-based), two words each:
@@ -135,12 +149,12 @@ contract MachineViews {
     function inventory(address who, uint256 from, uint256 n)
         external
         view
-        returns (uint256[] memory ids, uint16[] memory designs, uint16[] memory seatsPlus1, uint256[] memory plugs)
+        returns (uint256[] memory ids, uint16[] memory designs, uint24[] memory seatsPlus1, uint256[] memory plugs)
     {
         uint256 end = _end(from, n);
         ids = new uint256[](end > from ? end - from : 0);
         designs = new uint16[](ids.length);
-        seatsPlus1 = new uint16[](ids.length);
+        seatsPlus1 = new uint24[](ids.length);
         plugs = new uint256[](ids.length);
         uint256 k;
         for (uint256 id = from; id < end; ++id) {
@@ -149,7 +163,7 @@ contract MachineViews {
             } catch {
                 continue;
             }
-            (uint16 design,,,,,, uint16 seatPlus1, uint112 plug) = machine.parts(id);
+            (uint16 design,,,,,, uint24 seatPlus1, uint112 plug) = machine.parts(id);
             (ids[k], designs[k], seatsPlus1[k], plugs[k]) = (id, design, seatPlus1, plug);
             ++k;
         }
@@ -186,7 +200,11 @@ contract MachineViews {
 
     /// @notice Distinct parts `who` placed among `ids` that have something to claim, in ascending id order, and
     ///         the total that claiming them pays.
-    function claimable(address who, uint256[] calldata ids) external view returns (uint256[] memory out, uint256 total) {
+    function claimable(address who, uint256[] calldata ids)
+        external
+        view
+        returns (uint256[] memory out, uint256 total)
+    {
         out = new uint256[](ids.length);
         uint256[] memory sorted = ids;
         Arrays.sort(sorted);

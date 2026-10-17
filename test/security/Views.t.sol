@@ -124,7 +124,7 @@ contract SecurityViewsTest is Base {
         uint256 c = _grantPlug(alice, G.CAP, 19);
         assertEq(parts.ownerOf(b), bob);
         _place(alice, a, 0, 0, -2);
-        (uint256[] memory ids, uint16[] memory ds, uint16[] memory seats, uint256[] memory plugs) =
+        (uint256[] memory ids, uint16[] memory ds, uint24[] memory seats, uint256[] memory plugs) =
             views.inventory(alice, 0, 100);
         assertEq(ids.length, 1);
         assertEq(ids[0], c);

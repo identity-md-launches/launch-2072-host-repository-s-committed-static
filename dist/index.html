@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Identity Machine</title>
+    <meta name="description" content="A new machine every round on Robinhood Chain, built by everyone and paid in IMD. Every part that plugs into yours pays you; the last ten parts placed share the pot when the clock runs out." />
+    <link rel="icon" type="image/svg+xml" href="./brand/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Press+Start+2P&family=Space+Grotesk:wght@500;700&display=swap" />
+    <script type="module" crossorigin src="./assets/main-BoE30f3A.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-B0Z9INg1.js">
+    <link rel="modulepreload" crossorigin href="./assets/utils-B6fas3FB.js">
+    <link rel="modulepreload" crossorigin href="./assets/shell-CIgSAMct.js">
+    <link rel="modulepreload" crossorigin href="./assets/render-DOGLfCdQ.js">
+    <link rel="modulepreload" crossorigin href="./assets/econ-DRi9vg8v.js">
+    <link rel="modulepreload" crossorigin href="./assets/usd-CBVetng1.js">
+    <link rel="stylesheet" crossorigin href="./assets/shell-bFnqwh8W.css">
+  </head>
+  <body class="machine-page">
+    <header id="top"></header>
+    <main class="game">
+      <aside id="prize-rail" aria-label="The round: clock, jackpot and prize places">
+        <div id="round-summary" role="group" aria-label="Round">
+          <span class="sr-only"><span id="hud-round">Machine</span><span id="hud-pot">Jackpot loading</span><span id="hud-clock">–</span><span id="hud-bonus" aria-live="polite" aria-atomic="true"></span></span>
+        </div>
+        <button id="end-round" class="btn sm" hidden>End round and pay prizes</button>
+        <div id="hud-stack"></div>
+      </aside>
+      <div id="stage">
+        <div id="viewport">
+          <div id="crt-glass">
+            <canvas id="board" aria-label="Shared machine. Drag to pan; pinch or use the buttons to zoom."></canvas>
+            <div id="crt" aria-hidden="true"></div>
+          </div>
+          <div id="rail-fade" aria-hidden="true"></div>
+          <button id="display-settings" class="btn ghost" aria-label="Display settings" aria-haspopup="dialog" title="Display settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14M7 3v4M13 8v4M8 13v4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <div id="board-hint" hidden>Pick a part below</div>
+          <div id="tip" hidden></div>
+          <div id="placebar" hidden></div>
+          <div id="draft-tools" hidden>
+            <button class="tool" id="dt-rotate" title="Rotate (R)" aria-label="Rotate"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 8a4.5 4.5 0 1 1-1.3-3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.8 1.6v3.9H8.9" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+            <button class="tool" id="dt-remove" title="Return to inventory (Del)" aria-label="Return to inventory"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.8"/></svg></button>
+            <span id="dt-why"></span>
+          </div>
+          <div id="launch" hidden><label>Opens in</label><div class="big" id="launch-clock">–</div><span id="launch-when"></span></div>
+          <div id="loading" role="status"><img id="load-animation" src="./parts-loader.svg" width="52" height="52" alt=""><label>Loading machine</label><span id="load-text">Connecting…</span></div>
+          <div id="zoom"><button data-z="1.25" title="Zoom in" aria-label="Zoom in">+</button><button data-z="0.8" title="Zoom out" aria-label="Zoom out">−</button><button data-z="fit" title="Whole machine" aria-label="Whole machine">▣</button><button data-z="home" title="Core" aria-label="Core">⌖</button></div>
+          <div class="view-readout" aria-hidden="true"><span id="zoom-readout">220%</span></div>
+        </div>
+      </div>
+      <aside id="workbench" aria-label="Your workbench">
+          <section id="parts-tray" class="game-panel inventory" aria-labelledby="parts-title" hidden>
+            <div class="panel-head"><h2 id="parts-title">Your parts <span class="count" id="parts-count"></span></h2><button class="panel-close" aria-label="Close parts">×</button></div>
+            <p id="parts-hint" class="hint"></p>
+            <div id="shelf"></div>
+            <div class="inventory-actions"><div class="shelf-actions"><button id="autoplace" class="btn sm" hidden>Auto-arrange</button></div><button id="tray-mint" class="btn secondary">Buy more</button></div>
+            <div id="buildbar" hidden><span id="build-text" aria-live="polite"></span><button class="btn ghost" id="build-clear">Clear</button><button class="btn primary" id="build">Install</button></div>
+          </section>
+
+          <section id="mint-panel" class="game-panel" aria-labelledby="mint-title" hidden>
+            <div class="panel-head"><h2 id="mint-title">Get parts</h2><button class="panel-close" aria-label="Close checkout">×</button></div>
+            <div class="panel-body mint">
+              <div id="qty" role="group" aria-label="Choose your parts">
+                <button data-q="1" aria-pressed="false"><svg class="product-art" viewBox="0 0 64 56" aria-hidden="true"><rect class="face" x="19" y="28" width="26" height="26"/><circle class="screw" cx="23" cy="32" r="1.3"/><circle class="screw" cx="41" cy="32" r="1.3"/><circle class="screw" cx="23" cy="50" r="1.3"/><circle class="screw" cx="41" cy="50" r="1.3"/><circle class="ring" cx="32" cy="41" r="6"/><circle class="lamp" cx="32" cy="41" r="2.2"/></svg><span>Single</span><em>1 part</em></button>
+                <button data-q="5" class="on" aria-pressed="true"><svg class="product-art" viewBox="0 0 64 56" aria-hidden="true"><path class="face" d="M17.00 6 L20.75 9 L24.50 6 L28.25 9 L32.00 6 L35.75 9 L39.50 6 L43.25 9 L47.00 6 L47.00 54 L43.25 51 L39.50 54 L35.75 51 L32.00 54 L28.25 51 L24.50 54 L20.75 51 L17.00 54 Z"/><path class="seam" d="M18 13H46M18 47H46"/><circle class="ring" cx="32" cy="30" r="7"/><circle class="lamp" cx="32" cy="30" r="2.6"/></svg><span>Pack</span><em>5 parts</em></button>
+                <button data-q="20" aria-pressed="false"><svg class="product-art" viewBox="0 0 64 56" aria-hidden="true"><path class="lid" d="M5 22 L15 11 H59 L49 22 Z"/><path class="flap" d="M49 22 L59 11 V43 L49 54 Z"/><rect class="face" x="5" y="22" width="44" height="32"/><path class="seam" d="M6 30H48M50 29L58 20"/><circle class="ring" cx="27" cy="42" r="6.5"/><circle class="lamp" cx="27" cy="42" r="2.4"/></svg><span>Booster box</span><em>20 parts</em></button>
+              </div>
+              <div class="mint-row"><label id="payment-label">Pay with</label><div class="seg" id="payment" role="group" aria-labelledby="payment-label"><button data-pay="imd" class="on" aria-pressed="true">IMD</button><button data-pay="eth" aria-pressed="false">ETH</button></div></div>
+              <div class="mint-row"><label>Next part price</label><b id="s-price" class="mint-value">–</b></div>
+            </div>
+            <div class="mint-checkout">
+              <div class="mint-row"><label id="mint-total-label">Total</label><b id="mint-total" class="mint-value total">–</b></div>
+              <p class="mint-sub" id="mint-balance"></p>
+              <div id="mint-referral" class="referral-notice" hidden><span id="referral-to"></span><button id="referral-clear" class="btn sm outline" aria-label="Remove referrer">Remove</button></div>
+              <button id="mint" class="btn primary big" disabled>Loading…</button>
+              <p class="mint-note" id="mint-note" role="status"></p>
+            </div>
+          </section>
+
+          <section id="you-panel" class="game-panel" aria-labelledby="you-title" hidden>
+            <div class="panel-head"><h2 id="you-title">You</h2><button class="panel-close" aria-label="Close your account">×</button></div>
+            <div class="panel-body">
+              <div id="you-signin" class="signin" hidden><p>Connect a wallet to see your earnings, prizes and referral link.</p><button id="you-connect" class="btn primary">Connect wallet</button></div>
+              <div class="account-earnings">
+                <label>Earnings and prizes</label><b id="earned">–</b><button id="claim" class="btn sm">Claim</button>
+              </div>
+              <div class="account-metrics">
+                <div><label>Income share</label><b id="share">–</b></div>
+                <div><label>IMD balance</label><b id="bal">–</b></div>
+              </div>
+              <div class="account-referrals">
+                <div class="referral-rewards"><label>Referral rewards</label><b id="referral-earned">–</b><button id="referral-claim" class="btn sm" disabled>Claim</button></div>
+                <div class="referral-share">
+                  <label for="referral-link">Your referral link</label>
+                  <p id="referral-description" class="hint"></p>
+                  <div class="referral-link-row"><input id="referral-link" type="text" readonly aria-label="Your referral link"><button id="referral-copy" class="btn sm outline" disabled>Copy</button></div>
+                  <a href="./docs.html#referrals" class="small muted">How referrals work ↗</a>
+                </div>
+              </div>
+              <div id="core-claim"></div>
+              <p class="more"><a href="./docs.html#earning">How earnings work ↗</a></p>
+            </div>
+          </section>
+
+          <section id="stats-panel" class="game-panel" aria-labelledby="stats-title" hidden>
+            <div class="panel-head"><h2 id="stats-title">Stats</h2><button class="panel-close" aria-label="Close stats">×</button></div>
+            <div class="panel-body">
+              <div class="metric-grid"><div><label>Parts placed</label><b id="total-parts">–</b></div><div><label>Builders</label><b id="total-builders">–</b></div><div><label>Open sockets</label><b id="r-open">–</b></div><div><label>Reserve</label><b id="r-reserve">–</b></div><div><label>Paid to builders</label><b id="total-paid">–</b></div><div><label>Your parts placed</label><b id="my-placed">–</b></div><div><label>Parts minted</label><b id="total-minted">–</b></div><div><label>Prizes paid</label><b id="total-won">–</b></div></div>
+              <h3 class="log-title">Activity</h3>
+              <div id="log"></div>
+              <p class="more links"><a href="./parts.html">Part catalog ↗</a><a href="./docs.html">Rules ↗</a></p>
+            </div>
+          </section>
+      <nav id="game-dock" aria-label="Dashboard panels">
+        <button id="dock-parts" data-panel="parts" aria-controls="parts-tray" aria-expanded="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12v12H4zM8 1v3m4-3v3M8 16v3m4-3v3M1 8h3m-3 4h3m12-4h3m-3 4h3M8 8h4v4H8z"/></svg><span>Parts</span><span id="inventory-count" class="count"></span></button>
+        <button id="dock-mint" data-panel="mint" aria-controls="mint-panel" aria-expanded="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l7 4v8l-7 4-7-4V6zM3 6l7 4 7-4m-7 4v8M7 6l6 3"/></svg><span>Packs</span></button>
+        <button id="dock-you" data-panel="you" aria-controls="you-panel" aria-expanded="false"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6" r="3"/><path d="M4 18v-3a6 6 0 0 1 12 0v3"/></svg><span>You</span><span id="earn-count" class="count" aria-label="Earnings available"></span></button>
+        <button id="dock-stats" data-panel="stats" aria-controls="stats-panel" aria-expanded="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17V9h3v8zm6 0V3h3v14zm6 0V6h3v11z"/></svg><span>Stats</span></button>
+      </nav>
+      </aside>
+    </main>
+    <div id="drag-float" hidden aria-hidden="true"></div>
+    <dialog id="warn">
+      <h3>Before you play</h3>
+      <p>This is an experimental game. Once it's live, nobody can change, pause or undo it, including us.</p>
+      <p>You buy parts with IMD and plug them into a shared machine. Your parts earn while the round lasts, and the last ten parts placed win the jackpot. Parts cost more as a round goes on, and fast players and bots compete for the jackpot at the end.</p>
+      <p>Only spend what you're fine losing.</p>
+      <button id="warn-ok" class="btn primary">Got it</button>
+    </dialog>
+  </body>
+</html>

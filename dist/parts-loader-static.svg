@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 42 42" role="img" aria-labelledby="title desc">
+  <title id="title">Plugging parts</title>
+  <desc id="desc">Three gray parts extend into an empty space, then draw their trailing edge in, one after another.</desc>
+  <path id="part-0" style="--motion:part-0" fill="#d6d6d2" d="M 2.7 2 H 19.3 Q 20 2 20 2.7 V 19.3 Q 20 20 19.3 20 H 2.7 Q 2 20 2 19.3 V 2.7 Q 2 2 2.7 2 Z"/>
+  <path id="part-1" style="--motion:part-1" fill="#a8ada3" d="M 22.7 2 H 39.3 Q 40 2 40 2.7 V 19.3 Q 40 20 39.3 20 H 22.7 Q 22 20 22 19.3 V 2.7 Q 22 2 22.7 2 Z"/>
+  <path id="part-2" style="--motion:part-2" fill="#596154" d="M 22.7 22 H 39.3 Q 40 22 40 22.7 V 39.3 Q 40 40 39.3 40 H 22.7 Q 22 40 22 39.3 V 22.7 Q 22 22 22.7 22 Z"/>
+</svg>

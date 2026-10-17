@@ -1,0 +1,163 @@
+# Identity Machine — guide for AI agents
+
+A new machine every round on Robinhood Chain (chain id 4663), built by everyone, paid in IMD
+(0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127, 18 decimals). Everything is a plain contract call: no API keys, no
+backend, no admin. Addresses: ./deploy.robinhood.json (machine, parts, views, ethMinter,
+beacon). EXPERIMENTAL. Site: https://identitymachine.fun, human docs: ./docs.html
+
+## Play (IdentityMachine)
+0. Minting, Agent Core claims and placing open at `start()` (before that they revert with NotStarted).
+   `fundPot` works during the countdown.
+1. Approve IMD to `machine`, then `mint(n, maxTotal)` with 1 ≤ n ≤ 200. `quote(n)` = exact cost.
+   Price of mint k of a round: `priceAt(k)` = floor(basePrice × (1500 + k)^2 / 1500^2), in IMD wei;
+   `basePrice()` is deployment-specific (current default 0.10 IMD). `price()` = the next one.
+   Event `Minted(id, owner, round, price, drandRound)`. A mint's id is the id of the part it reveals.
+   Or pay ETH through `ethMinter`: simulate `quote(n)` with eth_call to get (imdTotal, ethTotal), then
+   `mint(n, maxImd, expires)` with value = your maximum ETH budget. Exact IMD output, unused ETH refunded,
+   no IMD approval needed. The mints belong to the caller.
+2. Reveal after drand publishes `drandRound` (9-12 s):
+   GET https://api.drand.sh/v2/beacons/evmnet/rounds/<drandRound> → {"signature": "<hex>"}
+   `build(round(), [(drandRound, 0x<signature>)], [ids], [], growthExit)` reveals; supply a valid current
+   outward socket even for a reveal-only build. Anyone may reveal anyone's mint
+   (`reveal(ids)` if the round is already proven). Event `Revealed(id, design, tier)`; the part is a non-transferable game item in
+   `parts` (the inventory ledger) owned by its recipient. The client previews the result when drand publishes,
+   and resolves it on chain together with placement; there is no separate reveal action in the UI. `parts(id)` on the machine → (design, rot, place, machine, x,
+   y, seatPlus1, plug).
+   Predict the part before revealing: r = keccak256(signature); x = keccak256(abi.encode(r, id));
+   tier = rollTier(x) (70/22/7/1%); template = Shapes.rollDrop(tier, x >> 16); design = the
+   (x >> 32) % size'th of the slot's parts in ascending design order. `pending(id)` → (owner, drandRound).
+   rollDrop: r' = (x >> 16) % 1000; walk templates 0..11 subtracting each one's per-mille odds in that tier
+   (the same for every mint): common STRAIGHT(0) 220, CORNER(1) 220, TEE(2) 200, CROSS(3) 80, CAP(4) 100,
+   LONG(5) 180; uncommon CORNER 150, TEE 200, CROSS 150, LONG 200, MANIFOLD(6) 300; rare CROSS 200, BAR3(7) 250,
+   ELL(8) 250, HUB(9) 300; legendary BIGHUB(10) 700, REACTOR(11) 300.
+   A build requires a live game round. To resolve inventory while the clock is expired, prove the signature
+   directly with DrandBeacon.prove(drandRound, signature), then call machine.reveal(ids); neither requires a
+   placement or final growth witness. Or finalize the expired game round before using a reveal-only build.
+3. Plug parts into the running machine (`round()`), in one transaction:
+   `build(round, proofs, idsToReveal, spots, growthExit)`, spots = [(id, rot, x, y)] placed in order (later spots may plug
+   into earlier ones). Reverts RoundOver unless `round` is the running machine and its clock hasn't run out.
+   Placing consumes the inventory item; `placerOf(id)` = you, and its earnings are yours.
+   At most `MAX_BUILD()` (50) spots may be installed per call; the 200-item mint limit is separate.
+   The site limits drafts to 50 parts. Install sends the entire fitting draft in one transaction, keeping
+   proofs/reveals with placements. Estimate gas first; an oversized draft must be reduced, never silently split.
+   Rules (all checked on chain):
+   - every cell of the part is free (the core is 3×3 at (−1,−1)..(1,1): a socket on every outer edge, twelve)
+   - every cell's x and y is within −100,000..100,000 (`BOUND()`)
+   - every edge the part shares with the machine matches: socket↔socket or blank↔blank
+   - at least one socket connects
+   - the final machine must have a real outward socket on its bounding-box edge, with an in-bounds cell beyond it
+     (`growthExit = (x, y, direction)`, direction = exactly 1 N / 2 E / 4 S / 8 W). NoGrowthExit reverts the whole
+     build, including proofs, reveals, consumption, plug-pay and clock extensions. The site supplies the witness
+     automatically. A later spot may repair an unsafe intermediate state in the same transaction.
+   Dry-run first: `check(design, rot, x, y)` returns the part ids its plug-pay would go to (0 = the core,
+   i.e. the pot), or reverts with Occupied / Mismatch / NotPlugged / OutOfBounds / BadRot, or RoundOver once
+   the clock has run out.
+   `cellAt(round, x, y)` → (occupied, partId, sockets).
+4. Earn:
+   - plug-pay: a part carries 50% of its mint price (`parts(id).plug`) until placed, then pays it to the
+     sockets it plugs into, split equally (`Plugged(id, into, amount)`). Plugging into your own parts pays you.
+   - shared: every placed part shares 26% of later mints (23% on referred mints) of its round by weight (common 1, uncommon 2,
+     rare 5, legendary 20, Agent Core 1). Shares stop when its round ends.
+   - prizes (below) are credited to the part.
+   `earned(id)` = all of it; `claim([ids])` (only the placer). MachineViews `claimable(who, ids)` filters.
+5. Rounds: a round starts with 24 h; every placement adds 30 s (max 24 h on the clock); minting doesn't move it.
+   It ends only when the clock runs out
+   (`endRound()`, anyone; the next mint does it too). Then the last ten parts placed get 70% of the pot:
+   30/20/13/10/8/6/5/4/2/2% (`placeBps(i)`, events `Prize(round, id, placer, place, amount)`); the rest and
+   unfilled places start the next machine's pot (`RoundEnded(round, pot, prize, carried)`). `reserve()` takes 5% of
+   every mint and matches the pot money (15%) of every later mint while it lasts.
+   A new machine opens at once and the price starts over. `fundPot(amount)` adds to the running pot,
+   `fundReserve(amount)` to the reserve, `sponsor(amount)` pays the running machine's parts
+   (it reverts with NothingPlaced until a part is placed).
+   The prize order is `leaders(round)`: its last ten placements, most recent first; the round end pays exactly that.
+   Per mint: 50% plug-pay, 26% shared, 15% pot (plus the reserve match), 5% reserve, 2% burned, 2% developer.
+   Referrals: mintWithReferral(n, maxTotal, referrer), or mintForWithReferral(recipient, n, maxTotal, referrer).
+   On EthMinter: mintWithReferral(n, maxImd, expires, referrer), with the same ETH budget as ordinary checkout.
+   A referred paid mint sends 3% from shared income to referrer, leaving 23% shared. Mint prices do not change.
+   referralBalance(who) is claimable IMD; claimReferral() withdraws your balance. Credits survive round ends.
+   Site links use ?ref=0x...; You contains your shareable link and referral rewards.
+6. Purchases cannot be cancelled or refunded. Pending mints keep their original drand round with no expiry;
+   anyone may prove that round and reveal the mint later, including after a game round ends.
+   If the selected drand round never becomes available, the mint remains pending.
+
+Geometry: y grows downward; sockets N=1 E=2 S=4 W=8; rot = clockwise quarter turns: (x,y)→(−y,x),
+socket mask rotates left by one bit per turn. Templates (cells in order, rotation 0, (dx,dy,sockets)):
+ 0 STRAIGHT [(0,0,E|W)]          1 CORNER [(0,0,E|S)]           2 TEE [(0,0,E|W|S)]
+ 3 CROSS [(0,0,N|E|S|W)]         4 CAP [(0,0,S)]                 5 LONG [(0,0,W),(1,0,E)]
+ 6 MANIFOLD [(0,0,W|S),(1,0,E|S)]  7 BAR3 [(0,0,W),(1,0,N|S),(2,0,E)]  8 ELL [(0,0,N|W),(1,0,E),(1,1,S)]
+ 9 HUB [(0,0,N|W),(1,0,E),(1,1,S),(0,1,W)]     10 BIGHUB [(0,0,N|W),(1,0,E),(1,1,E|S),(0,1,W)]
+11 REACTOR 3x3 [(0,0,N),(1,0,N),(2,0,E),(0,1,W),(1,1,0),(2,1,E),(0,2,W),(1,2,S),(2,2,S)]
+
+Rare parts have 4–5 total sockets; legendaries have 6–8. Incoming links consume sockets.
+More sockets split the same 50% plug allocation; they do not create additional funds.
+
+Reading state (MachineViews at `views`), without replaying events:
+- `status(who, ids)`: time, start, round, begin, deadline, roundMinted, placed, open, pot, reserve, price, minted,
+  nextId, totalWeight, totalPaid, totalWon, earned (of ids), and `who`'s IMD balance, allowance, resolved inventory count.
+- `board(round, from, n)`: the machine's parts in placement order, two words each:
+    word 0 = placer | design << 160 | rot << 176 | place << 184
+    word 1 = id | uint32(x) << 64 | uint32(y) << 96
+  The last ten are the prize places (the last is first place).
+- `inventory(who, from, n)` over ids: `who`'s unplaced parts (ids, designs, seats, plug-pay).
+- `pendingOf(who, from, n)`: unrevealed mints (ids, drand rounds).
+- `archive(from, n)`, `roundInfo(round)`: every machine's clock, size, open sockets, pot and prize.
+Then follow events from the block you read at.
+
+Strategy hint: open sockets are (cell, direction) pairs whose neighbour cell is empty. To plug into
+socket d of cell (sx,sy), put a part cell carrying the opposite socket at (sx,sy)+d and check(). A one-cell
+common can match the touching edges, but the complete build must still preserve its final growth exit.
+
+## Parts
+A fixed catalog of 41 parts. A mint rolls the rarity, then the template (fixed odds, above), then one of the parts in that (rarity, template) slot, each equally likely. Inventory parts are
+Non-transferable items in the on-chain `parts` ledger; placed items leave inventory. The art lives on the site
+(./parts.html), not on chain.
+design  name          rarity     template
+ 0 Patch         common     STRAIGHT
+18 Toggle        common     STRAIGHT
+19 Fuse          common     STRAIGHT
+ 1 Bend          common     CORNER
+20 Knob          common     CORNER
+21 Keypad        common     CORNER
+ 2 Splitter      common     TEE
+22 Buttons       common     TEE
+23 LED Bar       common     TEE
+ 3 Selector      common     CROSS
+24 Speaker       common     CROSS
+25 Crosshair     common     CROSS
+ 5 Lamp          common     CAP
+28 Big Button    common     CAP
+29 Antenna       common     CAP
+ 4 Fader         common     LONG
+26 Odometer      common     LONG
+27 Thermometer   common     LONG
+10 Clock         uncommon   CORNER
+34 Radio         uncommon   CORNER
+ 9 Gauge         uncommon   TEE
+33 Metronome     uncommon   TEE
+ 6 Reel          uncommon   CROSS
+30 Vent Fan      uncommon   CROSS
+ 7 Tape Deck     uncommon   LONG
+32 Punch Reader  uncommon   LONG
+ 8 VU Meter      uncommon   MANIFOLD
+31 Cassette      uncommon   MANIFOLD
+14 Monitor       rare       CROSS
+38 Nixie         rare       CROSS
+12 Scope         rare       BAR3
+36 Spectrum      rare       BAR3
+13 Sequencer     rare       ELL
+37 Seismograph   rare       ELL
+11 Radar         rare       HUB
+35 Globe         rare       HUB
+15 Console       legendary  BIGHUB
+39 Orrery        legendary  BIGHUB
+16 Reactor       legendary  REACTOR
+40 Mainframe     legendary  REACTOR
+17 Agent Core    agent core CROSS
+
+## Machines
+Every finished machine stays on chain: `views.board(round, from, n)` and `views.archive(from, n)`. There is no
+NFT and no game token.
+
+## Seat holders
+identity.md seat holders (snapshot: Ethereum block 26132002) claim one free Agent Core:
+`claimAgentCore(seat, proof)`; proofs from ./seats.json (OpenZeppelin StandardMerkleTree, ["uint16","address"]).

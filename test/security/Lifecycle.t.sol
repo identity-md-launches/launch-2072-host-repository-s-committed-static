@@ -32,7 +32,7 @@ contract SecurityLifecycleTest is Base {
         for (uint256 i; i < ids.length; ++i) {
             uint256 id = ids[i];
             (address owner, uint48 dr) = m.pending(id);
-            (uint16 d, uint8 rot, uint8 place, uint32 r, int32 x, int32 y, uint16 seat, uint112 plug) = m.parts(id);
+            (uint16 d, uint8 rot, uint8 place, uint32 r, int32 x, int32 y, uint24 seat, uint112 plug) = m.parts(id);
             address inventoryOwner;
             try parts.ownerOf(id) returns (address who) {
                 inventoryOwner = who;
@@ -113,14 +113,6 @@ contract SecurityLifecycleTest is Base {
         assertEq(parts.totalSupply(), 2);
     }
 
-
-
-
-
-
-
-
-
     function test_failedBuildRollsBackRealProofRevealsAndGeometry() public {
         // Real, published evmnet signature: this tests transactional cache rollback, not mock verification.
         uint64 dr = 21_238_365;
@@ -165,7 +157,8 @@ contract SecurityLifecycleTest is Base {
         m.reveal(_ids(id));
         assertEq(parts.ownerOf(id), bob);
         vm.prank(bob);
-        (bool ok,) = address(parts).call(abi.encodeWithSignature("transferFrom(address,address,uint256)", bob, carol, id));
+        (bool ok,) =
+            address(parts).call(abi.encodeWithSignature("transferFrom(address,address,uint256)", bob, carol, id));
         assertFalse(ok);
         _place(bob, id, 1, 0, -2);
         m.sponsor(1 ether);

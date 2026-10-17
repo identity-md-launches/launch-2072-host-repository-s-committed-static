@@ -48,7 +48,7 @@ contract IdentityMachine {
         uint32 machine; // the round it was placed in (0 = not placed)
         int32 x;
         int32 y;
-        uint16 seatPlus1; // Agent Cores: identity.md seat id + 1
+        uint24 seatPlus1; // Agent Cores: uint16 seat id + 1, including seat 65535
         uint112 plug; // the plug-pay it carries until it is placed
     }
 
@@ -216,7 +216,9 @@ contract IdentityMachine {
     /// @notice Total cost of the next `n` mints.
     function quote(uint256 n) external view returns (uint256 total) {
         uint256 k = _live() ? rounds[round].minted : 0;
-        for (uint256 i; i < n; ++i) total += priceAt(k + i);
+        for (uint256 i; i < n; ++i) {
+            total += priceAt(k + i);
+        }
     }
 
     // ================================================================== rounds
@@ -259,7 +261,8 @@ contract IdentityMachine {
 
     /// @notice Same price and parts as `mint`; a referrer earns 3% from shared income. Self-referrals are allowed.
     function mintWithReferral(uint256 n, uint256 maxTotal, address referrer)
-        external returns (uint256 firstId, uint256 total)
+        external
+        returns (uint256 firstId, uint256 total)
     {
         return _mint(msg.sender, n, maxTotal, referrer);
     }
@@ -272,14 +275,16 @@ contract IdentityMachine {
 
     /// @notice Referral-aware checkout: caller pays, recipient owns the parts.
     function mintForWithReferral(address recipient, uint256 n, uint256 maxTotal, address referrer)
-        external returns (uint256 firstId, uint256 total)
+        external
+        returns (uint256 firstId, uint256 total)
     {
         if (recipient == address(0)) revert BadRecipient();
         return _mint(recipient, n, maxTotal, referrer);
     }
 
     function _mint(address recipient, uint256 n, uint256 maxTotal, address referrer)
-        private returns (uint256 firstId, uint256 total)
+        private
+        returns (uint256 firstId, uint256 total)
     {
         if (block.timestamp < start) revert NotStarted();
         if (n == 0 || n > MAX_BATCH) revert BadBatch();
@@ -358,7 +363,7 @@ contract IdentityMachine {
         seatClaimed[seat] = true;
         id = nextId++;
         parts[id].design = Catalog.AGENT_CORE;
-        parts[id].seatPlus1 = seat + 1;
+        parts[id].seatPlus1 = uint24(seat) + 1;
         inventory.mint(msg.sender, id);
         emit CoreClaimed(id, seat, msg.sender);
     }
@@ -381,7 +386,13 @@ contract IdentityMachine {
     ///         signatures for rounds not proven yet (may be empty); `ids` are mints to reveal first (already revealed
     ///         ones are skipped). Spots are placed in order. The final state must leave the supplied outward socket;
     ///         otherwise the entire transaction reverts, including reveals, consumption, payments and clock changes.
-    function build(uint256 r, Proof[] calldata proofs, uint256[] calldata ids, Spot[] calldata spots, GrowthExit calldata exit) external {
+    function build(
+        uint256 r,
+        Proof[] calldata proofs,
+        uint256[] calldata ids,
+        Spot[] calldata spots,
+        GrowthExit calldata exit
+    ) external {
         if (block.timestamp < start) revert NotStarted();
         if (r != round || !_live()) revert RoundOver();
         if (spots.length > MAX_BUILD) revert BadBuildSize();
@@ -506,7 +517,9 @@ contract IdentityMachine {
             Shapes.footprint(Catalog.tmplOf(design), rot, x, y);
         (uint256 links, uint256[8] memory into,) = _wires(round, n, cx, cy, m);
         payees = new uint256[](links);
-        for (uint256 i; i < links; ++i) payees[i] = into[i];
+        for (uint256 i; i < links; ++i) {
+            payees[i] = into[i];
+        }
     }
 
     // ================================================================== earn
@@ -569,7 +582,9 @@ contract IdentityMachine {
     function leaders(uint256 r) external view returns (uint256[] memory ids) {
         uint256 placed = rounds[r].placed;
         ids = new uint256[](placed < 10 ? placed : 10);
-        for (uint256 i; i < ids.length; ++i) ids[i] = order[r][placed - i];
+        for (uint256 i; i < ids.length; ++i) {
+            ids[i] = order[r][placed - i];
+        }
     }
 
     // ================================================================== views
@@ -638,15 +653,17 @@ contract IdentityMachine {
     /// @dev The cell at (x, y) of machine r; the 3×3 core around the origin is implicit (part 0).
     function _cell(uint256 r, int32 x, int32 y) internal view returns (uint256) {
         if (x >= -1 && x <= 1 && y >= -1 && y <= 1) {
-            uint256 m = (y == -1 ? Shapes.N : 0) | (x == 1 ? Shapes.E : 0) | (y == 1 ? Shapes.S : 0)
-                | (x == -1 ? Shapes.W : 0);
+            uint256 m =
+                (y == -1 ? Shapes.N : 0) | (x == 1 ? Shapes.E : 0) | (y == 1 ? Shapes.S : 0) | (x == -1 ? Shapes.W : 0);
             return (1 << 8) | m;
         }
         return cells[_key(r, x, y)];
     }
 
     function _inside(uint8 n, int32[9] memory cx, int32[9] memory cy, int32 x, int32 y) internal pure returns (bool) {
-        for (uint256 i; i < n; ++i) if (cx[i] == x && cy[i] == y) return true;
+        for (uint256 i; i < n; ++i) {
+            if (cx[i] == x && cy[i] == y) return true;
+        }
         return false;
     }
 

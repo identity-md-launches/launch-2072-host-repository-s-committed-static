@@ -6,7 +6,8 @@
 //   node app/scripts/swarm-manifest.mjs .imd/reads/deployment.json [out] [--check [--dev <address>]]
 // --check also reads the chain before anything is funded: every contract's runtime code must equal this build's
 // (immutables masked), and every immutable must hold launch.json's value (dev: --dev, else printed), the
-// countdown included. Run `forge build` on the pinned commit first.
+// countdown included. Run `forge build src` on the pinned commit first: a full build also compiles the tests, and
+// with via_ir that can change the bytecode (2026-10-17: 17,885 bytes full vs 16,866 contracts only, the deployed size).
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createPublicClient, getAddress, getContractAddress, hexToBytes, http, parseAbi } from "viem";
 

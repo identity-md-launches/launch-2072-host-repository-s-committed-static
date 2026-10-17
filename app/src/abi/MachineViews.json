@@ -200,8 +200,8 @@
       },
       {
         "name": "seatsPlus1",
-        "type": "uint16[]",
-        "internalType": "uint16[]"
+        "type": "uint24[]",
+        "internalType": "uint24[]"
       },
       {
         "name": "plugs",

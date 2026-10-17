@@ -13,3 +13,6 @@ broadcast/*/4663/dry-run/
 marketing/out/
 marketing/data/
 marketing/video/node_modules/
+!/art/out/
+/art/out/*
+!/art/out/templates.json

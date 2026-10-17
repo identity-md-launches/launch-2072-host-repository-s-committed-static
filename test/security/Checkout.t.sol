@@ -172,6 +172,10 @@ contract SecurityCheckoutTest is Base {
         _externalFault(IEthPoolManager.take.selector);
     }
 
+    function test_poolManagerReadFailureRollsBackAndCanRetry() public {
+        _externalFault(IEthQuoter.poolManager.selector);
+    }
+
     function _delta(int128 eth, int128 output) internal pure returns (int256) {
         return (int256(eth) << 128) | int256(uint256(uint128(output)));
     }
@@ -307,19 +311,91 @@ contract SecurityCheckoutTest is Base {
         assertEq(pool.unlocks(), 0);
     }
 
-    function test_constructorRejectsMissingCodeWrongManagerAndInvalidFeeSpacing() public {
+    function _assertBadPool(EthMinter checkout) internal {
+        uint256 before = alice.balance;
         vm.expectRevert(EthMinter.BadPool.selector);
-        new EthMinter(m, IEthPoolManager(address(0)), IEthQuoter(address(pool)), 10_000, 100);
+        checkout.quote(1);
+        vm.expectRevert(EthMinter.BadPool.selector);
+        vm.prank(alice);
+        checkout.mint{value: 1 ether}(1, BASE, _now());
+        vm.expectRevert(EthMinter.BadPool.selector);
+        vm.prank(alice);
+        checkout.mintWithReferral{value: 1 ether}(1, BASE, _now(), bob);
+        assertEq(alice.balance, before);
+        assertEq(address(checkout).balance, 0);
+        assertEq(imd.balanceOf(address(checkout)), 0);
+        assertEq(imd.allowance(address(checkout), address(m)), 0);
+        assertEq(m.minted(), 0);
+        assertEq(m.referralBalance(bob), 0);
+        if (address(pool).code.length != 0) assertEq(pool.unlocks(), 0);
+    }
+
+    // Launch constructors cannot depend on external pool code. Both entry points must still validate it.
+    function test_missingPoolManagerIsRejectedOnUse() public {
+        address absent = makeAddr("absent pool manager");
+        vm.mockCall(address(pool), abi.encodeWithSelector(IEthQuoter.poolManager.selector), abi.encode(absent));
+        EthMinter checkout = new EthMinter(m, IEthPoolManager(absent), IEthQuoter(address(pool)), 10_000, 100);
+        _assertBadPool(checkout);
+    }
+
+    function test_missingQuoterIsRejectedOnUse() public {
+        EthMinter checkout =
+            new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(makeAddr("absent quoter")), 10_000, 100);
+        _assertBadPool(checkout);
+    }
+
+    function test_wrongQuoterManagerIsRejectedOnUse() public {
         CallbackPool other = new CallbackPool(imd);
-        vm.expectRevert(EthMinter.BadPool.selector);
-        new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(other)), 10_000, 100);
+        EthMinter checkout = new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(other)), 10_000, 100);
+        _assertBadPool(checkout);
+    }
+
+    function test_dependenciesCanAppearAfterDeploymentAndMintWithoutPriorQuote() public {
+        bytes memory runtime = address(pool).code;
+        vm.etch(address(pool), "");
+        EthMinter checkout = new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, 100);
+        _assertBadPool(checkout);
+        vm.etch(address(pool), runtime);
+        assertEq(pool.unlocks(), 0);
+
+        uint256 total = m.quote(1);
+        uint256 cost = (total * pool.rate() + 1 ether - 1) / 1 ether;
+        uint256 before = alice.balance;
+        vm.prank(alice);
+        (uint256 first, uint256 paid) = checkout.mintWithReferral{value: cost + 1 ether}(1, total, _now(), bob);
+        assertEq(paid, cost);
+        assertEq(pool.unlocks(), 1);
+        assertEq(before - alice.balance, cost);
+        assertEq(m.minted(), 1);
+        (address owner,) = m.pending(first);
+        assertEq(owner, alice);
+        assertEq(m.referralBalance(bob), total * m.REFERRAL() / m.BPS());
+        assertEq(address(checkout).balance, 0);
+        assertEq(imd.balanceOf(address(checkout)), 0);
+        assertEq(imd.allowance(address(checkout), address(m)), 0);
+        (uint256 nextTotal, uint256 nextCost) = checkout.quote(1);
+        assertEq(nextTotal, m.quote(1));
+        assertGt(nextCost, 0);
+    }
+
+    function test_successfulQuoteDoesNotBypassLaterPoolValidation() public {
+        minter.quote(1);
+        vm.mockCall(address(pool), abi.encodeWithSelector(IEthQuoter.poolManager.selector), abi.encode(address(m)));
+        _assertBadPool(minter);
+    }
+
+    function test_constructorRejectsMissingMachineAndInvalidFeeSpacing() public {
         vm.expectRevert(EthMinter.BadPool.selector);
         new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 1_000_000, 100);
         vm.expectRevert(EthMinter.BadPool.selector);
         new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, 0);
         vm.expectRevert(EthMinter.BadPool.selector); // unsigned for the swarm's constructor arguments; must fit int24
         new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, uint24(type(int24).max) + 1);
-        assertEq(new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, uint24(type(int24).max)).tickSpacing(), type(int24).max);
+        assertEq(
+            new EthMinter(m, IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, uint24(type(int24).max))
+                .tickSpacing(),
+            type(int24).max
+        );
         vm.expectRevert(EthMinter.BadPool.selector);
         new EthMinter(
             IdentityMachine(address(0)), IEthPoolManager(address(pool)), IEthQuoter(address(pool)), 10_000, 100
